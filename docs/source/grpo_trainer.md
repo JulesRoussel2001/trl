@@ -613,6 +613,25 @@ and the reward will be computed as the sum of the rewards from each function, or
 
 Note that [`GRPOTrainer`] supports multiple reward functions of different types. See the parameters documentation for more details.
 
+### Using compute_metrics
+
+[`GRPOTrainer`] accepts a `compute_metrics` function that is called once after each evaluation pass with an [`~transformers.EvalPrediction`]. Unlike [`DPOTrainer`], where `predictions` contains logit tensors, `predictions` in [`GRPOTrainer`] contains the generated completions as a list of strings (standard format) or a list of message dicts (conversational format). The `label_ids` field contains a float tensor of shape `(N, R)` with per-function reward scores, where `N` is the number of completions and `R` is the number of reward functions.
+
+```python
+def compute_metrics(eval_pred):
+    completions = eval_pred.predictions  # list of strings or list of message dicts
+    rewards = eval_pred.label_ids        # float tensor, shape [N, R]
+    ...
+    return {"my_metric": value}
+
+trainer = GRPOTrainer(
+    ...,
+    compute_metrics=compute_metrics,
+)
+```
+
+Returned keys appear in the evaluation logs prefixed with `eval_` (e.g., `eval_my_metric`). A key use case is detecting **reward hacking**: if `eval_reward` increases while a correctness metric stays flat, the model is gaming the reward signal rather than solving the task. See [grpo\_compute\_metrics.py](https://github.com/huggingface/trl/blob/main/examples/scripts/grpo_compute_metrics.py) for a complete example.
+
 ### Rapid Experimentation for GRPO
 
 RapidFire AI is an open-source experimentation engine that sits on top of TRL and lets you launch multiple GRPO configurations at once, even on a single GPU. Instead of trying configurations sequentially, RapidFire lets you **see all their learning curves earlier, stop underperforming runs, and clone promising ones with new settings in flight** without restarting. For more information, see [RapidFire AI Integration](rapidfire_integration).
