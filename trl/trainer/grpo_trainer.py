@@ -787,6 +787,7 @@ class GRPOTrainer(_BaseTrainer):
         # Buffers for compute_metrics: accumulated across eval batches, flushed in log()
         self._completions_for_compute_metrics = []
         self._rewards_for_compute_metrics = None
+        self._answers_for_compute_metrics = []
 
         # Ensure each process receives a unique seed to prevent duplicate completions when generating with
         # transformers if num_generations exceeds per_device_train_batch_size. We could skip it if we use vLLM, but
@@ -2339,8 +2340,10 @@ class GRPOTrainer(_BaseTrainer):
         if mode == "eval" and self.compute_metrics is not None:
             # gather_object is a collective: must be called on all processes, returns full list everywhere
             all_completions = gather_object(completions)
+            all_answers = gather_object([inp.get("answer") for inp in inputs])
             if self.accelerator.is_main_process:
                 self._completions_for_compute_metrics.extend(all_completions)
+                self._answers_for_compute_metrics.extend(all_answers)
                 # rewards_per_func is already globally gathered (line ~1316); use it directly
                 if self._rewards_for_compute_metrics is None:
                     self._rewards_for_compute_metrics = rewards_per_func.cpu()
@@ -2712,11 +2715,13 @@ class GRPOTrainer(_BaseTrainer):
             eval_pred = EvalPrediction(
                 predictions=self._completions_for_compute_metrics,
                 label_ids=self._rewards_for_compute_metrics,
+                inputs=self._answers_for_compute_metrics,
             )
             custom_metrics = self.compute_metrics(eval_pred)
             metrics.update({f"eval_{key}": val for key, val in custom_metrics.items()})
             self._completions_for_compute_metrics = []
             self._rewards_for_compute_metrics = None
+            self._answers_for_compute_metrics = []
 
         logs = {**logs, **metrics}
         super().log(logs, start_time)
