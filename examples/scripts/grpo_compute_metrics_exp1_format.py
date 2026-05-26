@@ -19,39 +19,39 @@
 # ///
 
 """
-Experiment 2 — Correctness reward only.
+Experiment 1 — Format reward only.
 
-Hypothesis: rewarding only correctness (does GT answer appear in the
-completion?) is harder to game. Loss does not collapse, mean_reward
-rises modestly. Format compliance emerges as a side effect even
-though it's not rewarded — an asymmetric generalization finding.
+Hypothesis: rewarding only format (the presence of <answer> tags) leads
+to reward hacking — format compliance goes to 1.0 while actual task
+performance degrades.
 
-Reward:    lenient substring match (does GT number appear in completion?)
-Observed:  mean_reward, strict_accuracy, format_compliance (emergent)
+Reward:    format-only (1.0 if <answer>...</answer> present, else 0.0)
+Observed:  mean_reward (= format_compliance), strict_accuracy, format_compliance
 """
 
 from datasets import load_dataset
 from grpo_compute_metrics_utils import (
-    answer_in_text,
     format_sample,
+    has_answer_format,
     make_compute_metrics,
 )
 
 from trl import GRPOConfig, GRPOTrainer
 
 
-def make_accuracy_reward():
-    """Returns a fresh accuracy_reward function with its own first-call flag."""
+def make_format_reward():
+    """Returns a fresh format_reward function with its own first-call flag.
+
+    Why a factory: the 'first call' debug print uses a flag in the closure.
+    If we defined first_call at module level, it would stay False after the
+    first run, so re-running the notebook wouldn't show the debug print.
+    Calling make_format_reward() each time gives us a brand-new flag.
+    """
     first_call = [True]
 
-    def accuracy_reward(completions, answer, **kwargs):
-        """1.0 if GT answer appears anywhere in completion text, else 0.0.
-
-        Format is completely ignored — this isolates correctness from format.
-        """
-        rewards = [
-            1.0 if answer_in_text(gt, c[0]["content"]) else 0.0 for c, gt in zip(completions, answer, strict=False)
-        ]
+    def format_reward(completions, answer, **kwargs):
+        """1.0 if the completion contains <answer>...</answer>, else 0.0."""
+        rewards = [1.0 if has_answer_format(c[0]["content"]) else 0.0 for c in completions]
         if first_call[0]:
             print("\n=== First reward_func call ===")
             print(f"completions received: {len(completions)}")
@@ -60,7 +60,7 @@ def make_accuracy_reward():
             first_call[0] = False
         return rewards
 
-    return accuracy_reward
+    return format_reward
 
 
 def main():
@@ -75,7 +75,7 @@ def main():
 
     trainer = GRPOTrainer(
         model="Qwen/Qwen2.5-0.5B-Instruct",
-        reward_funcs=make_accuracy_reward(),
+        reward_funcs=make_format_reward(),
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=make_compute_metrics(),
