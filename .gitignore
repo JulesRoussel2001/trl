@@ -151,3 +151,14 @@ uv.lock
 # AI agent generated artifacts
 /.agents/skills
 /.claude/skillsaudit_sample_full.json
+
+# Training artifacts
+trainer_output/
+*.safetensors
+*.pt
+
+# Large audit intermediate files (regeneratable)
+examples/grpo_extractor_audit/audit_sample_full.json
+examples/grpo_extractor_audit/audit_sample.json
+examples/grpo_extractor_audit/audit_results.json
+examples/grpo_extractor_audit/.env
